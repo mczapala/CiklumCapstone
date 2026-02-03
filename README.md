@@ -6,6 +6,8 @@
    - Required python version: **3.10**
  - Install the packages from requirements.txt using `pip`
  - Ensure the `ffmpeg` version 7.1.3 is installed on your system and in your `PATH` env. variable
+ - Load the desired models in LM studio
+ - Update endpoints/models in the `config.yml` according to the local setup
  - Run the application
 
 ### OpenWebUi setup (also explained in the video)
@@ -23,4 +25,5 @@
  - For the local and external task model, select the task model configured in the config.yaml
    - defaults to `qwen/qwen3-1.7b`
 
-That's it! Open new chat, select the configured agent chat model (default `nvidia/nemotron-3-nano`) and chat away!
+
+That's it! Open new chat, select the configured agent chat model (default `qwen/qwen3-14b`) and chat away!

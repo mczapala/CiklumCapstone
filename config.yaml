@@ -3,11 +3,14 @@ knowledgeManager:
   database: "qdrant" # chroma or qdrant
 agent:
   baseUrl: "http://192.168.88.26:1234/v1" #
-  model: "nvidia/nemotron-3-nano"
+  model: "qwen/qwen3-14b" # nvidia/nemotron-3-nano
 supervisor:
   baseUrl: "http://192.168.88.26:1234/v1"
-  model: "nvidia/nemotron-3-nano"
-  forceReflectionIssues: true
+  model: "qwen/qwen3-14b"
+  forceReflectionIssues: false
+ragas:
+  baseUrl: "http://192.168.88.26:1234/v1"
+  model: "qwen/qwen3-14b"
 tasksModel:
   baseUrl: "http://192.168.88.26:1234/v1"
   model: "qwen/qwen3-1.7b"

@@ -1,12 +1,12 @@
 from typing import List
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 
-from AgentPrompts import supervisor_behavior, behavior_prompt, evaluator_behavior, supervisor_prompt, evaluator_prompt
+from AgentPrompts import supervisor_behavior, behavior_prompt, supervisor_prompt
 from AgentState import AgentState
 from AgentTools import tools
 from ConfigurationManager import ConfigurationManager
@@ -42,12 +42,10 @@ class LocalAgent:
         pipeline.add_node("reason", self.reason)
         pipeline.add_node("tools", ToolNode(tools))
         pipeline.add_node("reflect", self.reflect)
-        pipeline.add_node("evaluate", self.evaluate)
         pipeline.set_entry_point("reason")
 
         pipeline.add_conditional_edges("reason", self.edge_from_reason)
         pipeline.add_conditional_edges("reflect", self.edge_from_reflection)
-        pipeline.add_conditional_edges("evaluate", self.edge_from_evaluate)
 
         pipeline.add_edge("tools", "reason")
 
@@ -95,25 +93,6 @@ class LocalAgent:
             "iterations": state["iterations"]
         }
 
-    async def evaluate(self, state: AgentState, config: RunnableConfig):
-        messages = list(state["messages"])[:-1]
-
-        prompt = self.get_last_human_message(messages)
-        prompt.insert(0, SystemMessage(content=evaluator_behavior()))
-        prompt.append(HumanMessage(content=evaluator_prompt()))
-
-        full_eval = None
-        async for chunk in self.eval_model.astream(prompt, config=config):
-            if full_eval is None:
-                full_eval = chunk
-            else:
-                full_eval += chunk
-
-        return {
-            "messages": [HumanMessage(content=full_eval.content, name="Quartermaster the JudgeMaster")],
-            "iterations": state["iterations"]
-        }
-
     @staticmethod
     def edge_from_reason(state: AgentState):
         last_msg = state["messages"][-1]
@@ -125,22 +104,23 @@ class LocalAgent:
         return "reflect"
 
     @staticmethod
-    def edge_from_evaluate(state: AgentState):
-        print_debug(" -> END")
-        return END
-
-    @staticmethod
     def edge_from_reflection(state: AgentState):
         if state["iterations"] > 5:
-            print_debug(" -> evaluate (max iterations reached)")
-            return "evaluate"
+            print_debug(" -> END (max iterations reached)")
+            return END
 
         if len(state["messages"]) > 0 and "APPROVED" in state["messages"][-1].content.split("</think>")[-1].strip():
-            print_debug(" -> evaluate (APPROVED)")
-            return "evaluate"
+            print_debug(" -> END (APPROVED)")
+            return END
 
         print_debug(" -> reason")
         return "reason"
+
+    async def invoke(self, messages: List[BaseMessage]):
+        start_state = {"messages": messages, "iterations": 0}
+        start_state["messages"].insert(0, SystemMessage(content=behavior_prompt()))
+        result = await self.agent.ainvoke(start_state)
+        return result
 
     async def gui_chat_async(self, messages: List[BaseMessage]):
         start_state = {"messages": messages, "iterations": 0}
@@ -155,7 +135,6 @@ class LocalAgent:
         states = {
             "reason": "🧠 **Reasoning**",
             "reflect": "🔍 **Reflecting**",
-            "evaluate": "⚖️ **Evaluating**",
             "tools": "🛠️ **Tool call**"
         }
         longest_tag_length = max(len(t) for t in tags_to_replace.keys()) + 1
@@ -277,7 +256,7 @@ class LocalAgent:
                     out.append(buffer[0])
                     buffer = buffer[1:]
                 else:
-                    # buffer is shorter than a tag, so it might be part of some tag we want to replace
+                    # buffer is shorter than the longest tag, so it might be part of some tag we want to replace
                     # stop processing and wait for more tokens.
                     break
             else:
@@ -286,10 +265,3 @@ class LocalAgent:
                 buffer = ""
 
         return "".join(out), buffer
-
-    @staticmethod
-    def get_last_human_message(messages: List[BaseMessage]):
-        human_index = next((i for i in reversed(range(len(messages))) if messages[i].type == "human"
-                                                                    and (not messages[i].name or len(messages[i].name) == 0)),
-                           ValueError("No human message found"))
-        return messages[human_index:]
